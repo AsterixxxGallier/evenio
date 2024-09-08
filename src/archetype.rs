@@ -8,7 +8,6 @@ use core::ops::Index;
 use core::panic::{RefUnwindSafe, UnwindSafe};
 use core::ptr::NonNull;
 use core::{fmt, iter, mem, slice};
-use std::collections::hash_map::Entry;
 
 use ahash::RandomState;
 use slab::Slab;
@@ -26,7 +25,7 @@ use crate::fetch::FetcherState;
 use crate::handler::{
     HandlerConfig, HandlerInfo, HandlerInfoPtr, HandlerList, HandlerParam, Handlers,
 };
-use crate::map::HashMap;
+use crate::map::{Entry, HashMap};
 use crate::prelude::World;
 use crate::query::Query;
 use crate::sparse::SparseIndex;
@@ -211,11 +210,7 @@ impl Archetypes {
         }
     }
 
-    pub(crate) fn plan_remove(
-        &mut self,
-        entity_id: EntityId,
-        component_idx: ComponentIdx,
-    ) {
+    pub(crate) fn plan_remove(&mut self, entity_id: EntityId, component_idx: ComponentIdx) {
         match self.planned_moves.entry(entity_id) {
             Entry::Occupied(mut entry) => {
                 let planned_move = entry.get_mut();
@@ -240,6 +235,50 @@ impl Archetypes {
                     inserted_component_pointers: Vec::new(),
                     inserted_component_drop_fns: Vec::new(),
                 });
+            }
+        }
+    }
+
+    pub(crate) fn perform_move(
+        &mut self,
+        entity_id: EntityId,
+        planned_move: PlannedEntityMoveOperation,
+        entities: &Entities,
+    ) {
+        let PlannedEntityMoveOperation {
+            removed_components,
+            inserted_components,
+            inserted_component_pointers,
+            inserted_component_drop_fns,
+        } = planned_move;
+        
+        // not used here
+        _ = inserted_component_drop_fns;
+        
+        let loc = entities.get(entity_id).unwrap();
+        
+        let component_indices = self.get(loc.archetype).unwrap().component_indices();
+        
+        // let archetype = unsafe {
+        //     self.create_archetype()
+        // }
+    }
+
+    pub(crate) fn perform_move_operations(&mut self, component_indices: &BitSet<ComponentIdx>, entities: &Entities) {
+        let entity_ids = self.planned_moves.keys().copied().collect::<Vec<_>>();
+        for entity_id in entity_ids {
+            match self.planned_moves.entry(entity_id) {
+                Entry::Occupied(entry) => {
+                    let planned_move = entry.get();
+                    if planned_move
+                        .inserted_components
+                        .intersects(component_indices)
+                    {
+                        let planned_move = entry.remove();
+                        self.perform_move(entity_id, planned_move, entities);
+                    }
+                }
+                Entry::Vacant(_) => unreachable!(),
             }
         }
     }

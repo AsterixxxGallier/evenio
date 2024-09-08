@@ -140,6 +140,17 @@ impl<T: SparseIndex> BitSet<T> {
             .get(block)
             .map_or(false, |&block| (block >> bit) & 1 == 1)
     }
+    
+    /// Returns `true` if the set contains an element that `other` also has.
+    #[must_use]
+    pub(crate) fn intersects(&self, other: &Self) -> bool {
+        for (a, b) in self.blocks.iter().zip(other.blocks.iter()) {
+            if a & b != 0 {
+                return true;
+            }
+        }
+        false
+    }
 
     /// Returns the number of elements less than `value`.
     #[must_use]
